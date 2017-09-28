@@ -5,22 +5,132 @@ apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-android-extensions'
 
 android {
-    compileSdkVersion 26
-    buildToolsVersion "26.0.1"
-    defaultConfig {
-        applicationId "com.sample.sy.gradle_improving_sample"
-        minSdkVersion 16
-        targetSdkVersion 26
-        versionCode 1
-        versionName "1.0"
-        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
-    }
-    buildTypes {
-        release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+    // sign 설정
+    signingConfigs {
+        release_apk {
+            keyAlias 'release key'
+            keyPassword '12345'
+            storeFile file("../release_key")
+            storePassword '12345'
         }
     }
+
+    compileSdkVersion  Integer.parseInt(project.COMPILE_VER)
+    buildToolsVersion  project.BUILD_VER
+
+    defaultConfig {
+        multiDexEnabled true
+        applicationId "com.sample.sy.gradle_improving_sample"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
+
+    // productflavors 옵션을 사용하기 위해서 중복되지 않는 이름을 지정해야함.
+    flavorDimensions "stage", "mode"
+
+    productFlavors {
+
+        beta {
+            dimension "mode"
+            applicationIdSuffix ".google"
+            targetSdkVersion 21
+            versionCode 1
+            versionName "1.0"
+        }
+
+        alpha {
+            dimension "mode"
+            applicationIdSuffix ".plus"
+            targetSdkVersion 23
+            versionCode 1
+            versionName "1.0"
+        }
+
+        live {
+            dimension "mode"
+            applicationIdSuffix ".plus"
+            targetSdkVersion 23
+            versionCode 2
+            versionName "1.0"
+        }
+
+        dev {
+            dimension "stage"
+            minSdkVersion 21
+
+            // png 최적화 옵션 제거
+            aaptOptions.cruncherEnabled = false
+
+            // 언어와 해상도 고정
+            resConfigs "ko", "hdpi"
+            ext.enableCrashlytics = false
+        }
+
+        prod {
+            dimension "stage"
+            minSdkVersion Integer.parseInt(project.MIN_VER)
+        }
+    }
+
+
+    buildTypes {
+
+        release {
+            // proguard로 코드 축소를 활성화 할것인지 여부 (true가 사용)
+            minifyEnabled false
+            // 데이터를 4바이트 단위로 정렬 (정렬이 되지 않으면 메모리 소비량과 메모리를 읽는 속도 증가)
+            // apk를 zipalign을 사용하여 정렬하지 않으면 구글 플레이에 배포 못함.
+            zipAlignEnabled true
+
+
+            // sdk에 위치한 해당 이름의 파일을 가져와 적용 (뒤의 것을 최적화 수행한다)
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+
+            // multidex앱에서 class를 찾지 못하는 에러가 발생할때 추가해줘야 됨
+            multiDexKeepProguard file('multi-dex-keep.pro')
+
+            // 릴리즈모드일 경우 sign 지정
+//            signingConfig signingConfigs.release_apk
+
+            // Release mode에서 디버깅 모드 유부 옵션
+            debuggable false
+            jniDebuggable false
+        }
+
+        debug {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            multiDexKeepProguard file('multi-dex-keep.pro')
+        }
+
+        // 패키지 만들시 이름 변경 (버전 이름 + 버전 코드)
+        applicationVariants.all { variant ->
+            variant.outputs.all { output ->
+                def flavor = variant.flavorName
+                outputFileName = "test-${flavor}-${variant.versionName}.${variant.versionCode}.apk"
+            }
+        }
+    }
+
+    // 중분 빌드 기능 (최초빌드시 느림)
+    dexOptions {
+        preDexLibraries true
+    }
+
+    // 필요없는 패키지 ignore
+    android.variantFilter { variant ->
+        def buildName = variant.buildType.name
+        def flavorName = variant.getFlavors().get(1).name
+
+        if (flavorName == 'dev' && buildName == 'release'
+                || flavorName == 'prod' && buildName == 'debug') {
+            variant.setIgnore(true)
+        }
+
+        // prod 버전일 경우에만 aplit 옵션 활성화 (해당 옵션은 abi별density별로 apk파일을 분할해서 만듬)
+        splits.abi.enable = (flavorName == "prod")
+    }
+
 }
 
 dependencies {
